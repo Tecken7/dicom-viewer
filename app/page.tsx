@@ -1,65 +1,107 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import { useState, useRef } from "react"
+import JSZip from "jszip"
+import CornerstoneViewer from "./CornerstoneViewer"
+export default function DicomViewer() {
+  // Zde si budeme pamatovat rozbalené DICOM soubory
+  const [dicomFiles, setDicomFiles] = useState<File[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Hlavní funkce pro zpracování nahraného ZIPu
+  const handleZipUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsLoading(true)
+    try {
+      const zip = new JSZip()
+      const loadedZip = await zip.loadAsync(file)
+
+      const extractedFiles: File[] = []
+
+      // Projdeme všechny soubory uvnitř ZIPu
+      for (const relativePath of Object.keys(loadedZip.files)) {
+        const zipEntry = loadedZip.files[relativePath]
+        
+        // Ignorujeme složky a skryté systémové soubory (např. z Macu)
+        if (!zipEntry.dir && !relativePath.includes("__MACOSX") && !relativePath.startsWith(".")) {
+          // Vytáhneme data ze souboru jako Blob (surová data)
+          const blob = await zipEntry.async("blob")
+          // Uděláme z toho klasický File, aby se s ním Cornerstone uměl bavit
+          const extractedFile = new File([blob], zipEntry.name, { type: "application/dicom" })
+          extractedFiles.push(extractedFile)
+        }
+      }
+
+      setDicomFiles(extractedFiles)
+    } catch (error) {
+      console.error("Chyba při čtení ZIPu:", error)
+      alert("Nepodařilo se rozbalit ZIP soubor. Ujistěte se, že jde o platný formát.")
+    } finally {
+      setIsLoading(false)
+      // Vyčistíme input, aby šel nahrát stejný soubor znovu
+      if (fileInputRef.current) fileInputRef.current.value = ""
+    }
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="flex h-screen w-screen bg-black font-sans text-white">
+      
+      {/* LEVÉ MENU (Sidebar) */}
+      <div className="w-80 border-r border-gray-800 bg-gray-900 p-5 flex flex-col gap-4 z-10 shadow-xl">
+        <div>
+          <h1 className="text-2xl font-bold tracking-wide">DICOM Viewer</h1>
+          <p className="text-xs text-gray-400 mt-1 uppercase tracking-wider">Powered by Cornerstone3D</p>
+        </div>
+
+        {/* Zóna pro nahrání */}
+        <div 
+          className={`mt-4 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors ${
+            isLoading ? "border-blue-500 bg-blue-500/10" : "border-gray-600 bg-gray-800/50 hover:bg-gray-800 hover:border-gray-400"
+          }`}
+          onClick={() => !isLoading && fileInputRef.current?.click()}
+        >
+          {isLoading ? (
+            <p className="text-blue-400 font-semibold animate-pulse">Rozbaluji ZIP v paměti...</p>
+          ) : (
+            <p className="text-sm text-gray-300">
+              <span className="block font-bold text-white mb-1">Nahrát CT (ZIP)</span>
+              Klikněte pro výběr .zip souboru s DICOM daty
+            </p>
+          )}
+        </div>
+
+        {/* Skrytý input pro výběr souboru */}
+        <input 
+          type="file" 
+          accept=".zip" 
+          ref={fileInputRef} 
+          className="hidden" 
+          onChange={handleZipUpload} 
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        {/* Informace o načtených datech */}
+        {dicomFiles.length > 0 && (
+          <div className="mt-4 p-4 bg-gray-800 rounded-lg border border-gray-700">
+            <h2 className="text-sm font-bold text-green-400">✅ ZIP úspěšně rozbalen</h2>
+            <p className="text-xs text-gray-300 mt-1">Nalezeno souborů: <span className="font-bold text-white">{dicomFiles.length}</span></p>
+          </div>
+        )}
+      </div>
+
+{/* HLAVNÍ PLOCHA */}
+<div className="flex-1 p-3 bg-black">
+  {dicomFiles.length > 0 ? (
+    <CornerstoneViewer files={dicomFiles} />
+  ) : (
+    <div className="w-full h-full border border-gray-800 rounded-xl flex items-center justify-center bg-gray-950">
+      <p className="text-gray-600 text-lg animate-pulse">Čekám na DICOM data...</p>
     </div>
-  );
+  )}
+</div>
+
+    </div>
+  )
 }
